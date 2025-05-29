@@ -749,9 +749,12 @@ function loadCourses(filterDepartment = '', searchTerm = '', filterSemester = ''
         search: searchTerm
     };
 
-    fetch('/api/admin/courses')
+    fetch('/api/admin/courses?' + new Date().getTime())
         .then(response => response.json())
         .then(data => {
+            console.log('📊 Loaded courses data:', data.courses);
+            console.log('📊 First course price:', data.courses[0]?.price, typeof data.courses[0]?.price);
+
             // Store all courses globally
             allCourses = data.courses;
 
@@ -996,12 +999,20 @@ function loadCourses(filterDepartment = '', searchTerm = '', filterSemester = ''
                         // Ensure semester has a value or display a dash
                         const semester = course.semester || '-';
 
+                        // Debug price display
+                        console.log(`💰 Course ${course.name}: price = ${course.price} (${typeof course.price})`);
+                        const displayPrice = parseInt(course.price || 0);
+                        console.log(`💰 Display price: ${displayPrice}`);
+
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td>${course.course_code}</td>
                             <td>${course.name}</td>
                             <td>${course.department_name || 'غير محدد'}</td>
                             <td>${semester}</td>
+                            <td class="text-center">
+                                <span class="badge bg-success">${displayPrice} دينار</span>
+                            </td>
                             <td>${course.max_students}</td>
                             <td class="text-center">
                                 <button class="btn btn-sm btn-success manage-groups" data-id="${course.id}">
@@ -2596,21 +2607,22 @@ function setupAddCourseForm() {
             const name = document.getElementById('course-name').value;
             const department_id = document.getElementById('course-department-select').value;
             const semester = document.getElementById('course-semester').value;
+            const price = parseInt(document.getElementById('course-price').value) || 0;
             // الحد الأقصى للطلبة يتم حسابه تلقائيًا من مجموع المجموعات
             const max_students = 0;
 
             // Validate inputs
-            if (!course_code || !name || !department_id) {
+            if (!course_code || !name || !department_id || price < 0) {
                 if (errorElement) {
-                    errorElement.textContent = 'يرجى ملء جميع الحقول المطلوبة';
+                    errorElement.textContent = 'يرجى ملء جميع الحقول المطلوبة وتأكد من أن السعر صحيح';
                     errorElement.classList.remove('d-none');
                 } else {
-                    alert('يرجى ملء جميع الحقول المطلوبة');
+                    alert('يرجى ملء جميع الحقول المطلوبة وتأكد من أن السعر صحيح');
                 }
                 return;
             }
 
-            console.log('Sending course data:', { course_code, name, department_id, max_students, semester });
+            console.log('Sending course data:', { course_code, name, department_id, max_students, semester, price });
 
             // Disable form while submitting
             const submitButton = addCourseForm.querySelector('button[type="submit"]');
@@ -2623,7 +2635,7 @@ function setupAddCourseForm() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ course_code, name, department_id, max_students, semester })
+                body: JSON.stringify({ course_code, name, department_id, max_students, semester, price })
             })
             .then(response => {
                 if (!response.ok) {
@@ -2646,8 +2658,10 @@ function setupAddCourseForm() {
                         alert('تمت إضافة المادة بنجاح');
                     }
 
-                    // Reload courses
-                    loadCourses();
+                    // Reload courses with a small delay to ensure database update is complete
+                    setTimeout(() => {
+                        loadCourses();
+                    }, 100);
                 } else {
                     if (errorElement) {
                         errorElement.textContent = data.error || 'حدث خطأ أثناء إضافة المادة';
@@ -2696,7 +2710,7 @@ function openEditCourseModal(courseId) {
             });
 
             // After loading departments, load course data
-            fetch(`/api/admin/courses/${courseId}`)
+            fetch(`/api/admin/courses/${courseId}?` + new Date().getTime())
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('فشل في الحصول على بيانات المادة');
@@ -2721,6 +2735,12 @@ function openEditCourseModal(courseId) {
                         semesterSelect.value = course.semester || '';
                     }
 
+                    // Set price value
+                    const priceInput = document.getElementById('edit-course-price');
+                    if (priceInput) {
+                        priceInput.value = course.price || 0;
+                    }
+
                     // Show modal
                     const editModal = new bootstrap.Modal(document.getElementById('editCourseModal'));
                     editModal.show();
@@ -2734,6 +2754,166 @@ function openEditCourseModal(courseId) {
             console.error('Error loading departments:', error);
             alert('حدث خطأ أثناء تحميل التخصصات: ' + error.message);
         });
+}
+
+// Force update course price in table
+function forceUpdateCoursePrice(courseId, newPrice) {
+    console.log('🔧 Force updating course price:', courseId, newPrice);
+
+    const coursesTable = document.getElementById('courses-table-body');
+    if (!coursesTable) {
+        console.log('❌ Courses table not found');
+        return false;
+    }
+
+    const rows = coursesTable.querySelectorAll('tr');
+    let updated = false;
+
+    rows.forEach((row, index) => {
+        const editButton = row.querySelector('.edit-course');
+        if (editButton && editButton.getAttribute('data-id') == courseId) {
+            console.log(`📍 Found course row at index ${index}`);
+
+            // Find the price cell (5th column - index 4)
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 5) {
+                const priceCell = cells[4];
+                const oldContent = priceCell.innerHTML;
+
+                // Update the price with visual feedback
+                priceCell.innerHTML = `
+                    <span class="badge bg-success">${parseInt(newPrice)} دينار</span>
+                `;
+
+                console.log('💰 Updated price cell:');
+                console.log('  Old:', oldContent);
+                console.log('  New:', priceCell.innerHTML);
+
+                // Add visual feedback
+                priceCell.style.backgroundColor = '#d4edda';
+                priceCell.style.transition = 'background-color 0.5s';
+
+                setTimeout(() => {
+                    priceCell.style.backgroundColor = '';
+                }, 2000);
+
+                updated = true;
+            }
+        }
+    });
+
+    if (updated) {
+        console.log('✅ Successfully force-updated course price in table');
+    } else {
+        console.log('❌ Could not find course row to update');
+    }
+
+    return updated;
+}
+
+// Update course in table immediately
+function updateCourseInTable(courseId, updatedCourse) {
+    console.log('🔄 Updating course in table:', courseId, updatedCourse);
+
+    // Try force update first
+    const forceUpdated = forceUpdateCoursePrice(courseId, updatedCourse.price);
+    if (forceUpdated) {
+        return;
+    }
+
+    // Fallback to full row update
+    const coursesTable = document.getElementById('courses-table-body');
+    if (!coursesTable) return;
+
+    const rows = coursesTable.querySelectorAll('tr');
+    rows.forEach(row => {
+        const editButton = row.querySelector('.edit-course[data-id="' + courseId + '"]');
+        if (editButton) {
+            console.log('📍 Found course row, doing full update...');
+
+            // Get current department name from global courses data
+            let departmentName = 'غير محدد';
+            if (allCourses) {
+                const courseData = allCourses.find(c => c.id == courseId);
+                if (courseData) {
+                    departmentName = courseData.department_name || 'غير محدد';
+                }
+            }
+
+            const semester = updatedCourse.semester || '-';
+            const displayPrice = parseInt(updatedCourse.price || 0);
+
+            console.log('💰 Full update - price to:', displayPrice);
+
+            // Update the row content
+            row.innerHTML = `
+                <td>${updatedCourse.course_code}</td>
+                <td>${updatedCourse.name}</td>
+                <td>${departmentName}</td>
+                <td>${semester}</td>
+                <td class="text-center">
+                    <span class="badge bg-success">${displayPrice} دينار</span>
+                </td>
+                <td>${updatedCourse.max_students}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-success manage-groups" data-id="${updatedCourse.id}">
+                        <i class="fas fa-users"></i> <span class="d-none d-md-inline">المجموعات</span>
+                    </button>
+                </td>
+                <td>
+                    <div class="d-flex flex-column flex-sm-row gap-1">
+                        <button class="btn btn-sm btn-primary edit-course mb-1 mb-sm-0" data-id="${updatedCourse.id}">
+                            <i class="fas fa-edit"></i> <span class="d-none d-md-inline">تعديل</span>
+                        </button>
+                        <button class="btn btn-sm btn-info manage-prerequisites mb-1 mb-sm-0" data-id="${updatedCourse.id}">
+                            <i class="fas fa-link"></i> <span class="d-none d-md-inline">المتطلبات</span>
+                        </button>
+                        <button class="btn btn-sm btn-danger delete-course" data-id="${updatedCourse.id}">
+                            <i class="fas fa-trash"></i> <span class="d-none d-md-inline">حذف</span>
+                        </button>
+                    </div>
+                </td>
+            `;
+
+            // Re-attach event listeners for this row
+            const newEditButton = row.querySelector('.edit-course');
+            if (newEditButton) {
+                newEditButton.addEventListener('click', function() {
+                    const courseId = this.getAttribute('data-id');
+                    openEditCourseModal(courseId);
+                });
+            }
+
+            const newDeleteButton = row.querySelector('.delete-course');
+            if (newDeleteButton) {
+                newDeleteButton.addEventListener('click', function() {
+                    const courseId = this.getAttribute('data-id');
+                    const courseName = this.closest('tr').querySelector('td:nth-child(2)').textContent;
+                    if (confirm(`هل أنت متأكد من حذف المادة "${courseName}"؟`)) {
+                        deleteCourse(courseId);
+                    }
+                });
+            }
+
+            const newGroupsButton = row.querySelector('.manage-groups');
+            if (newGroupsButton) {
+                newGroupsButton.addEventListener('click', function() {
+                    const courseId = this.getAttribute('data-id');
+                    openCourseGroupsModal(courseId);
+                });
+            }
+
+            const newPrereqButton = row.querySelector('.manage-prerequisites');
+            if (newPrereqButton) {
+                newPrereqButton.addEventListener('click', function() {
+                    const courseId = this.getAttribute('data-id');
+                    openCoursePrerequisitesModal(courseId);
+                });
+            }
+
+            console.log('✅ Course row updated successfully');
+        }
+    });
 }
 
 // Setup edit course form
@@ -2752,16 +2932,17 @@ function setupEditCourseForm() {
             // الحد الأقصى للطلبة يتم حسابه تلقائيًا من مجموع المجموعات
             const max_students = 0;
             const semester = document.getElementById('edit-course-semester').value;
+            const price = parseInt(document.getElementById('edit-course-price').value) || 0;
 
             // Validate inputs
-            if (!course_code || !name || !department_id) {
+            if (!course_code || !name || !department_id || price < 0) {
                 const errorElement = document.getElementById('edit-course-form-error');
-                errorElement.textContent = 'يرجى ملء جميع الحقول المطلوبة';
+                errorElement.textContent = 'يرجى ملء جميع الحقول المطلوبة وتأكد من أن السعر صحيح';
                 errorElement.classList.remove('d-none');
                 return;
             }
 
-            console.log('Updating course:', courseId, { course_code, name, department_id, max_students, semester });
+            console.log('Updating course:', courseId, { course_code, name, department_id, max_students, semester, price });
 
             // Disable button while submitting
             const originalButtonText = saveChangesButton.textContent;
@@ -2773,7 +2954,7 @@ function setupEditCourseForm() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ course_code, name, department_id, max_students, semester })
+                body: JSON.stringify({ course_code, name, department_id, max_students, semester, price })
             })
             .then(response => {
                 if (!response.ok) {
@@ -2785,19 +2966,52 @@ function setupEditCourseForm() {
             })
             .then(data => {
                 if (data.success) {
+                    console.log('✅ Course update successful:', data);
+
+                    // Update the course in global data
+                    if (allCourses) {
+                        const courseIndex = allCourses.findIndex(c => c.id == courseId);
+                        if (courseIndex !== -1) {
+                            // Merge the updated data with existing course data
+                            allCourses[courseIndex] = { ...allCourses[courseIndex], ...data.course };
+                            console.log('📊 Updated course in global data:', allCourses[courseIndex]);
+                        }
+                    }
+
+                    // Update the course in the table immediately
+                    updateCourseInTable(courseId, data.course);
+
                     // Show success message
                     const successElement = document.getElementById('edit-course-form-success');
                     successElement.textContent = 'تم تحديث بيانات المادة بنجاح';
                     successElement.classList.remove('d-none');
 
-                    // Reload courses
-                    loadCourses();
+                    // Force multiple reloads to ensure update
+                    console.log('🔄 Reloading courses after update...');
+                    setTimeout(() => {
+                        console.log('🔄 First reload...');
+                        loadCourses();
+                    }, 100);
+
+                    setTimeout(() => {
+                        console.log('🔄 Second reload...');
+                        loadCourses();
+                    }, 500);
+
+                    setTimeout(() => {
+                        console.log('🔄 Third reload...');
+                        loadCourses();
+                    }, 1000);
 
                     // Close modal after a delay
                     setTimeout(() => {
                         const editModal = bootstrap.Modal.getInstance(document.getElementById('editCourseModal'));
                         if (editModal) {
                             editModal.hide();
+                            // Force reload after modal is hidden
+                            setTimeout(() => {
+                                loadCourses();
+                            }, 200);
                         }
                     }, 1500);
                 } else {

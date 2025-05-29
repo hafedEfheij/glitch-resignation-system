@@ -366,6 +366,65 @@
         </div>
     </div>
 
+    <!-- Receipt Number Modal -->
+    <div class="modal fade" id="receiptNumberModal" tabindex="-1" aria-labelledby="receiptNumberModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="receiptNumberModalLabel">
+                        <i class="fas fa-money-check-alt me-2"></i>
+                        تأكيد عملية الدفع
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopQRCamera()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>تغيير حالة الدفع إلى "خالص"</strong><br>
+                        <small>يرجى إدخال رقم الإيصال لتأكيد عملية الدفع</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="receiptNumberInput" class="form-label fw-bold">
+                            <i class="fas fa-receipt me-2"></i>
+                            رقم الإيصال <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text">
+                                <i class="fas fa-hashtag"></i>
+                            </span>
+                            <input type="text" class="form-control" id="receiptNumberInput"
+                                   placeholder="أدخل رقم الإيصال (مثال: 12345)"
+                                   required autocomplete="off">
+                            <button class="btn btn-outline-primary" type="button" id="scanQRButton"
+                                    title="مسح QR Code أو Barcode">
+                                <i class="fas fa-qrcode me-1"></i>
+                                <span class="d-none d-md-inline">مسح الكود</span>
+                            </button>
+                        </div>
+                        <div class="form-text mt-2">
+                            <i class="fas fa-lightbulb me-1"></i>
+                            يمكنك إدخال رقم الإيصال يدوياً أو استخدام زر المسح لقراءة QR Code أو Barcode
+                        </div>
+                    </div>
+
+                    <div id="receiptError" class="alert alert-danger d-none">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <span id="receiptErrorText"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="stopQRCamera()">
+                        <i class="fas fa-times me-2"></i>إلغاء
+                    </button>
+                    <button type="button" class="btn btn-success btn-lg" id="confirmReceiptButton" onclick="handleConfirmPayment()">
+                        <i class="fas fa-check-circle me-2"></i>تأكيد الدفع
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Filtered Payment Report Modal -->
     <div class="modal fade" id="filteredPaymentReportModal" tabindex="-1" aria-labelledby="filteredPaymentReportModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
@@ -400,6 +459,10 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- QR Code Scanner Library -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <!-- Barcode Scanner Library - Alternative CDN -->
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
     <!-- Responsive JS -->
     <script src="../js/responsive.js"></script>
     <!-- Modal Fixes JS -->
@@ -1006,17 +1069,37 @@
                                         <small class="text-muted ms-2">(${enrollment.course_code})</small>
                                         ${enrollment.group_name ? `<span class="badge bg-secondary ms-2">مجموعة ${enrollment.group_name}</span>` : ''}
                                     </div>
-                                    <div class="payment-actions">
-                                        <span class="badge ${statusBadgeClass} payment-status-badge">
-                                            <i class="fas ${isPaid ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                                            <span>${enrollment.payment_status || 'غير خالص'}</span>
-                                        </span>
-                                        <button class="btn ${toggleBtnClass} btn-sm payment-toggle-btn"
-                                                data-enrollment-id="${enrollment.enrollment_id}"
-                                                data-current-status="${enrollment.payment_status || 'غير خالص'}">
-                                            <i class="fas ${toggleBtnIcon}"></i>
-                                            <span>${toggleBtnText}</span>
-                                        </button>
+                                    <div class="payment-actions d-flex flex-column align-items-end">
+                                        <div class="d-flex align-items-center mb-1">
+                                            <span class="badge ${statusBadgeClass} payment-status-badge me-2">
+                                                <i class="fas ${isPaid ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                                                <span>${enrollment.payment_status || 'غير خالص'}</span>
+                                            </span>
+                                            <button class="btn ${toggleBtnClass} btn-sm payment-toggle-btn"
+                                                    data-enrollment-id="${enrollment.enrollment_id}"
+                                                    data-current-status="${enrollment.payment_status || 'غير خالص'}"
+                                                    data-receipt-number="${enrollment.receipt_number || ''}">
+                                                <i class="fas ${toggleBtnIcon}"></i>
+                                                <span>${toggleBtnText}</span>
+                                            </button>
+                                        </div>
+                                        ${(function() {
+                                            console.log('🏠 MAIN UI SIMPLE CHECK - Student:', '${student.name}', 'Course:', enrollment.course_name, 'Receipt:', enrollment.receipt_number, 'Type:', typeof enrollment.receipt_number);
+
+                                            // Simple validation - just check if it exists and is not empty
+                                            const isValid = Boolean(enrollment.receipt_number && String(enrollment.receipt_number).trim() !== '');
+
+                                            console.log('🏠 MAIN UI SIMPLE CHECK - Is valid:', isValid, 'Will display:', isValid ? enrollment.receipt_number : 'nothing');
+
+                                            return isValid;
+                                        })() ? `
+                                            <div class="receipt-info">
+                                                <span class="badge bg-info text-dark">
+                                                    <i class="fas fa-receipt me-1"></i>
+                                                    رقم الإيصال: ${enrollment.receipt_number}
+                                                </span>
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                             `;
@@ -1044,6 +1127,56 @@
                 });
             }
 
+            // Variables to store current payment operation
+            let currentPaymentButton = null;
+            let currentEnrollmentId = null;
+            let currentPaymentStatus = null;
+
+            // Function to show success notification
+            function showSuccessNotification(message, details = '') {
+                // Remove any existing notifications
+                const existingNotifications = document.querySelectorAll('.success-notification');
+                existingNotifications.forEach(notification => notification.remove());
+
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = 'success-notification position-fixed top-0 end-0 m-3';
+                notification.style.zIndex = '9999';
+                notification.innerHTML = `
+                    <div class="alert alert-success alert-dismissible fade show shadow-lg" role="alert">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2 fs-4"></i>
+                            <div>
+                                <strong>${message}</strong>
+                                ${details ? `<br><small class="text-muted">${details}</small>` : ''}
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+
+                // Add to page
+                document.body.appendChild(notification);
+
+                // Auto remove after 5 seconds
+                setTimeout(() => {
+                    if (notification && notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 5000);
+            }
+
+            // Function to show receipt error
+            function showReceiptError(message) {
+                const receiptError = document.getElementById('receiptError');
+                const receiptErrorText = document.getElementById('receiptErrorText');
+
+                if (receiptError && receiptErrorText) {
+                    receiptErrorText.textContent = message;
+                    receiptError.classList.remove('d-none');
+                }
+            }
+
             // Toggle payment status
             function togglePaymentStatus(event) {
                 const button = event.currentTarget;
@@ -1051,9 +1184,37 @@
                 const currentStatus = button.dataset.currentStatus;
                 const newStatus = currentStatus === 'خالص' ? 'غير خالص' : 'خالص';
 
+                // Store current operation details
+                currentPaymentButton = button;
+                currentEnrollmentId = enrollmentId;
+                currentPaymentStatus = newStatus;
+
+                // If changing to paid status, show receipt number modal
+                if (newStatus === 'خالص') {
+                    // Clear previous input
+                    document.getElementById('receiptNumberInput').value = '';
+                    document.getElementById('receiptError').classList.add('d-none');
+
+                    // Show modal
+                    const modal = new bootstrap.Modal(document.getElementById('receiptNumberModal'));
+                    modal.show();
+                } else {
+                    // If changing to unpaid, proceed directly
+                    updatePaymentStatus(enrollmentId, newStatus, null, button);
+                }
+            }
+
+            // Update payment status function
+            function updatePaymentStatus(enrollmentId, paymentStatus, receiptNumber, button) {
                 // Disable button and show loading state
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span><span>جاري...</span>';
+
+                // Prepare request body
+                const requestBody = { payment_status: paymentStatus };
+                if (receiptNumber) {
+                    requestBody.receipt_number = receiptNumber;
+                }
 
                 // Update payment status via API
                 fetch(`/api/admin/enrollments/${enrollmentId}/payment-status`, {
@@ -1061,11 +1222,13 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ payment_status: newStatus })
+                    body: JSON.stringify(requestBody)
                 })
                 .then(response => {
                     if (!response.ok) {
-                        throw new Error('فشل في تحديث حالة الدفع');
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'فشل في تحديث حالة الدفع');
+                        });
                     }
                     return response.json();
                 })
@@ -1073,22 +1236,51 @@
                     // Update UI
                     const listItem = button.closest('.course-item');
                     const statusBadge = listItem.querySelector('.payment-status-badge');
+                    const paymentActions = listItem.querySelector('.payment-actions');
 
                     // Update badge
-                    statusBadge.className = `badge payment-status-badge ${newStatus === 'خالص' ? 'bg-success' : 'bg-danger'}`;
-                    statusBadge.innerHTML = `<i class="fas ${newStatus === 'خالص' ? 'fa-check-circle' : 'fa-times-circle'}"></i><span>${newStatus}</span>`;
+                    statusBadge.className = `badge payment-status-badge me-2 ${paymentStatus === 'خالص' ? 'bg-success' : 'bg-danger'}`;
+                    statusBadge.innerHTML = `<i class="fas ${paymentStatus === 'خالص' ? 'fa-check-circle' : 'fa-times-circle'}"></i><span>${paymentStatus}</span>`;
+
+                    // Update or remove receipt number display
+                    const existingReceiptDisplay = paymentActions.querySelector('.receipt-info');
+                    if (existingReceiptDisplay) {
+                        existingReceiptDisplay.remove();
+                    }
+
+                    if (paymentStatus === 'خالص' && receiptNumber) {
+                        const receiptDisplay = document.createElement('div');
+                        receiptDisplay.className = 'receipt-info';
+                        receiptDisplay.innerHTML = `
+                            <span class="badge bg-info text-dark">
+                                <i class="fas fa-receipt me-1"></i>
+                                رقم الإيصال: ${receiptNumber}
+                            </span>
+                        `;
+                        paymentActions.appendChild(receiptDisplay);
+                    }
 
                     // Update button
-                    button.className = `btn ${newStatus === 'خالص' ? 'btn-outline-danger' : 'btn-outline-success'} btn-sm payment-toggle-btn`;
-                    button.innerHTML = `<i class="fas ${newStatus === 'خالص' ? 'fa-times-circle' : 'fa-check-circle'}"></i><span>${newStatus === 'خالص' ? 'غير خالص' : 'خالص'}</span>`;
-                    button.dataset.currentStatus = newStatus;
+                    button.className = `btn ${paymentStatus === 'خالص' ? 'btn-outline-danger' : 'btn-outline-success'} btn-sm payment-toggle-btn`;
+                    button.innerHTML = `<i class="fas ${paymentStatus === 'خالص' ? 'fa-times-circle' : 'fa-check-circle'}"></i><span>${paymentStatus === 'خالص' ? 'غير خالص' : 'خالص'}</span>`;
+                    button.dataset.currentStatus = paymentStatus;
+                    button.dataset.receiptNumber = receiptNumber || '';
                     button.disabled = false;
+
+                    // Show success message with enhanced styling
+                    if (paymentStatus === 'خالص') {
+                        // Create a more elegant success notification
+                        showSuccessNotification(`تم تحديث حالة الدفع إلى "خالص" بنجاح`, `رقم الإيصال: ${receiptNumber}`);
+                    } else {
+                        showSuccessNotification('تم تحديث حالة الدفع إلى "غير خالص" بنجاح', '');
+                    }
                 })
                 .catch(error => {
                     // Show error and re-enable button
                     alert('حدث خطأ: ' + error.message);
                     button.disabled = false;
-                    button.innerHTML = `<i class="fas ${currentStatus === 'خالص' ? 'fa-times-circle' : 'fa-check-circle'}"></i><span>${currentStatus === 'خالص' ? 'غير خالص' : 'خالص'}</span>`;
+                    const originalStatus = button.dataset.currentStatus;
+                    button.innerHTML = `<i class="fas ${originalStatus === 'خالص' ? 'fa-times-circle' : 'fa-check-circle'}"></i><span>${originalStatus === 'خالص' ? 'غير خالص' : 'خالص'}</span>`;
                 });
             }
 
@@ -1213,6 +1405,7 @@
                                         <th>رمز المادة</th>
                                         <th>اسم المادة</th>
                                         <th>الفصل الدراسي</th>
+                                        <th>رقم الإيصال</th>
                                         <th>تاريخ التسجيل</th>
                                     </tr>
                                 </thead>
@@ -1220,6 +1413,9 @@
                     `;
 
                     paidCourses.forEach((course, index) => {
+                        console.log('📄 Report - Processing paid course:', course);
+                        console.log('📄 Report - Receipt number:', course.receipt_number, 'Type:', typeof course.receipt_number);
+
                         // Format date
                         const enrollmentDate = new Date(course.created_at);
                         const formattedDate = enrollmentDate.toLocaleDateString('ar-LY');
@@ -1227,12 +1423,21 @@
                         // Get course semester
                         const courseSemester = course.semester || 'غير محدد';
 
+                        // SIMPLIFIED: Check if receipt number is valid
+                        console.log('📄 SIMPLE CHECK - Course:', course.course_name, 'Receipt:', course.receipt_number, 'Type:', typeof course.receipt_number);
+
+                        // Simple validation - just check if it exists and is not empty
+                        const isValidReceipt = Boolean(course.receipt_number && String(course.receipt_number).trim() !== '');
+
+                        console.log('📄 SIMPLE CHECK - Is valid:', isValidReceipt, 'Will display:', isValidReceipt ? course.receipt_number : 'غير محدد');
+
                         reportHtml += `
                             <tr>
                                 <td>${index + 1}</td>
                                 <td>${course.course_code}</td>
                                 <td>${course.course_name || course.name || 'غير محدد'}</td>
                                 <td>${courseSemester}</td>
+                                <td><span class="badge ${isValidReceipt ? 'bg-info text-white' : 'bg-secondary text-white'}">${isValidReceipt ? course.receipt_number : 'غير محدد'}</span></td>
                                 <td>${formattedDate}</td>
                             </tr>
                         `;
@@ -2165,6 +2370,74 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <div class="mt-5">
+                        <h5 class="text-center mb-4">تفاصيل المواد وأرقام الإيصالات</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered">
+                                <thead class="table-info">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>اسم الطالب</th>
+                                        <th>رقم القيد</th>
+                                        <th>رمز المادة</th>
+                                        <th>اسم المادة</th>
+                                        <th>حالة الدفع</th>
+                                        <th>رقم الإيصال</th>
+                                        <th>تاريخ التسجيل</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                // إضافة تفاصيل جميع المواد
+                let enrollmentCounter = 1;
+                students.forEach(student => {
+                    if (student.enrollments && student.enrollments.length > 0) {
+                        student.enrollments.forEach(enrollment => {
+                            console.log('📊 Group Report - Processing enrollment:', enrollment);
+                            console.log('📊 Group Report - Receipt number:', enrollment.receipt_number, 'Type:', typeof enrollment.receipt_number);
+
+                            const paymentStatus = enrollment.payment_status === 'خالص' || enrollment.payment_status === 'paid' ? 'خالص' : 'غير خالص';
+                            const paymentBadgeClass = paymentStatus === 'خالص' ? 'bg-success' : 'bg-danger';
+
+                            // SIMPLIFIED: Check if receipt number is valid
+                            console.log('📊 GROUP SIMPLE CHECK - Student:', student.name, 'Course:', enrollment.course_name, 'Receipt:', enrollment.receipt_number, 'Type:', typeof enrollment.receipt_number);
+
+                            // Simple validation - just check if it exists and is not empty
+                            const isValidReceipt = Boolean(enrollment.receipt_number && String(enrollment.receipt_number).trim() !== '');
+
+                            console.log('📊 GROUP SIMPLE CHECK - Is valid:', isValidReceipt, 'Will display:', isValidReceipt ? enrollment.receipt_number : '-');
+
+                            const receiptNumber = isValidReceipt ? enrollment.receipt_number : '-';
+                            const receiptBadgeClass = receiptNumber !== '-' ? 'bg-info text-white' : 'bg-secondary text-white';
+
+                            // تنسيق تاريخ التسجيل
+                            const enrollmentDate = new Date(enrollment.created_at);
+                            const formattedDate = enrollmentDate.toLocaleDateString('ar-LY');
+
+                            reportHtml += `
+                                <tr>
+                                    <td>${enrollmentCounter}</td>
+                                    <td>${student.name}</td>
+                                    <td>${student.student_id}</td>
+                                    <td>${enrollment.course_code}</td>
+                                    <td>${enrollment.course_name || enrollment.name || 'غير محدد'}</td>
+                                    <td><span class="badge ${paymentBadgeClass} text-white">${paymentStatus}</span></td>
+                                    <td><span class="badge ${receiptBadgeClass}">${receiptNumber}</span></td>
+                                    <td>${formattedDate}</td>
+                                </tr>
+                            `;
+                            enrollmentCounter++;
+                        });
+                    }
+                });
+
+                reportHtml += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 `;
 
                 // Actualizar contenido del informe
@@ -2251,6 +2524,14 @@
                                         background-color: #0d6efd !important;
                                         color: white !important;
                                     }
+                                    .bg-info {
+                                        background-color: #0dcaf0 !important;
+                                        color: white !important;
+                                    }
+                                    .bg-secondary {
+                                        background-color: #6c757d !important;
+                                        color: white !important;
+                                    }
                                     .bg-light {
                                         background-color: #f8f9fa !important;
                                     }
@@ -2323,6 +2604,24 @@
                                             -webkit-print-color-adjust: exact;
                                             print-color-adjust: exact;
                                         }
+                                        .bg-info {
+                                            background-color: #0dcaf0 !important;
+                                            color: white !important;
+                                            -webkit-print-color-adjust: exact;
+                                            print-color-adjust: exact;
+                                        }
+                                        .bg-secondary {
+                                            background-color: #6c757d !important;
+                                            color: white !important;
+                                            -webkit-print-color-adjust: exact;
+                                            print-color-adjust: exact;
+                                        }
+                                        .table-info th {
+                                            background-color: #cff4fc !important;
+                                            color: #055160 !important;
+                                            -webkit-print-color-adjust: exact;
+                                            print-color-adjust: exact;
+                                        }
                                         .progress-bar.bg-success {
                                             background-color: #198754 !important;
                                             color: white !important;
@@ -2365,11 +2664,698 @@
 
 
 
+            // Setup receipt number modal functionality
+            function setupReceiptNumberModal() {
+                console.log('Setting up receipt number modal...');
+
+                const confirmReceiptButton = document.getElementById('confirmReceiptButton');
+                const receiptNumberInput = document.getElementById('receiptNumberInput');
+                const scanQRButton = document.getElementById('scanQRButton');
+                const receiptError = document.getElementById('receiptError');
+                const modal = document.getElementById('receiptNumberModal');
+
+                console.log('Modal elements found:', {
+                    confirmReceiptButton: !!confirmReceiptButton,
+                    receiptNumberInput: !!receiptNumberInput,
+                    scanQRButton: !!scanQRButton,
+                    receiptError: !!receiptError,
+                    modal: !!modal
+                });
+
+                // Handle Enter key in receipt input
+                if (receiptNumberInput) {
+                    receiptNumberInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleConfirmPayment();
+                        }
+                    });
+
+                    // Clear error when user starts typing
+                    receiptNumberInput.addEventListener('input', function() {
+                        if (receiptError) {
+                            receiptError.classList.add('d-none');
+                        }
+                    });
+                }
+
+                // Handle QR scan button
+                if (scanQRButton) {
+                    scanQRButton.addEventListener('click', function() {
+                        startQRScanner();
+                    });
+                }
+
+                // Handle modal shown event to focus input
+                if (modal) {
+                    modal.addEventListener('shown.bs.modal', function() {
+                        if (receiptNumberInput) {
+                            receiptNumberInput.focus();
+                        }
+                    });
+                }
+            }
+
+            // Global function to handle confirm payment (called from onclick)
+            window.handleConfirmPayment = function() {
+                console.log('handleConfirmPayment called');
+
+                const receiptNumberInput = document.getElementById('receiptNumberInput');
+                const receiptError = document.getElementById('receiptError');
+                const modal = document.getElementById('receiptNumberModal');
+
+                if (!receiptNumberInput) {
+                    console.error('Receipt input not found');
+                    alert('خطأ: لم يتم العثور على حقل رقم الإيصال');
+                    return;
+                }
+
+                const receiptNumber = receiptNumberInput.value.trim();
+                console.log('Receipt number:', receiptNumber);
+
+                // Validate receipt number
+                if (!receiptNumber) {
+                    showReceiptError('رقم الإيصال مطلوب');
+                    return;
+                }
+
+                if (receiptNumber.length < 3) {
+                    showReceiptError('رقم الإيصال يجب أن يكون 3 أرقام على الأقل');
+                    return;
+                }
+
+                // Hide error if validation passes
+                if (receiptError) {
+                    receiptError.classList.add('d-none');
+                }
+
+                // Update payment status with receipt number
+                console.log('Current payment data:', {
+                    currentEnrollmentId,
+                    currentPaymentStatus,
+                    currentPaymentButton: !!currentPaymentButton
+                });
+
+                if (currentEnrollmentId && currentPaymentStatus && currentPaymentButton) {
+                    // Clear receipt input
+                    receiptNumberInput.value = '';
+
+                    updatePaymentStatus(currentEnrollmentId, currentPaymentStatus, receiptNumber, currentPaymentButton);
+
+                    // Hide modal
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+
+                    // Clear global variables
+                    currentEnrollmentId = null;
+                    currentPaymentStatus = null;
+                    currentPaymentButton = null;
+                } else {
+                    console.error('Missing payment data:', {
+                        currentEnrollmentId,
+                        currentPaymentStatus,
+                        currentPaymentButton: !!currentPaymentButton
+                    });
+                    alert('حدث خطأ: بيانات الدفع غير مكتملة. يرجى إعادة المحاولة.');
+                }
+            };
+
+            // QR Scanner functionality
+            let currentStream = null;
+            let currentDeviceIndex = 0;
+            let availableDevices = [];
+
+            // Function to start QR scanner
+            window.startQRScanner = function() {
+                console.log('Starting QR scanner...');
+
+                // Create QR scanner modal
+                const qrModalHtml = `
+                    <div class="modal fade" id="qrScannerModal" tabindex="-1" aria-labelledby="qrScannerModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header bg-primary text-white">
+                                    <h5 class="modal-title" id="qrScannerModalLabel">
+                                        <i class="fas fa-qrcode me-2"></i>
+                                        مسح QR Code أو Barcode
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopQRCamera()"></button>
+                                </div>
+                                <div class="modal-body text-center">
+                                    <div class="alert alert-info mb-3">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        وجه الكاميرا نحو QR Code أو Barcode الخاص برقم الإيصال
+                                        <br><small>يدعم: QR Code, Code128, Code39, EAN-13, EAN-8, UPC-A, UPC-E</small>
+                                    </div>
+
+                                    <div class="camera-container position-relative">
+                                        <video id="qr-video" class="w-100" style="max-height: 400px; border-radius: 10px;" autoplay muted playsinline></video>
+                                        <div id="qr-overlay" class="position-absolute top-50 start-50 translate-middle" style="border: 2px solid #28a745; width: 200px; height: 200px; border-radius: 10px; pointer-events: none;"></div>
+                                    </div>
+
+                                    <div id="qr-status" class="mt-3">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">جاري البحث عن الكاميرا...</span>
+                                        </div>
+                                        <p class="mt-2">جاري البحث عن الكاميرا...</p>
+                                    </div>
+
+                                    <div id="qr-debug" class="mt-3 d-none">
+                                        <div class="alert alert-info">
+                                            <small>
+                                                <strong>معلومات التشخيص:</strong><br>
+                                                <span id="qr-debug-text">جاري التحميل...</span>
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <div id="qr-error" class="alert alert-danger d-none mt-3">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span id="qr-error-text"></span>
+                                        <div class="mt-2">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="retryQRCamera()">
+                                                <i class="fas fa-redo me-2"></i>إعادة المحاولة
+                                            </button>
+                                            <button class="btn btn-outline-info btn-sm ms-2" onclick="testQRLibrary()">
+                                                <i class="fas fa-flask me-2"></i>اختبار المكتبة
+                                            </button>
+                                            <button class="btn btn-outline-warning btn-sm ms-2" onclick="openDiagnostic()">
+                                                <i class="fas fa-bug me-2"></i>تشخيص متقدم
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="stopQRCamera()">
+                                        <i class="fas fa-times me-2"></i>إلغاء
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success" onclick="manualEntryFromQR()">
+                                        <i class="fas fa-keyboard me-2"></i>إدخال يدوي
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary" onclick="switchCamera()" id="switch-camera-btn" style="display: none;">
+                                        <i class="fas fa-camera me-2"></i>تبديل الكاميرا
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Remove existing QR modal if any
+                const existingQRModal = document.getElementById('qrScannerModal');
+                if (existingQRModal) {
+                    existingQRModal.remove();
+                }
+
+                // Add QR modal to page
+                document.body.insertAdjacentHTML('beforeend', qrModalHtml);
+
+                // Show QR modal
+                const qrModal = new bootstrap.Modal(document.getElementById('qrScannerModal'));
+                qrModal.show();
+
+                // Start camera after modal is shown
+                setTimeout(() => {
+                    initQRCamera();
+                }, 500);
+            };
+
+            // Function to test QR and Barcode libraries
+            window.testQRLibrary = function() {
+                const debugDiv = document.getElementById('qr-debug');
+                const debugText = document.getElementById('qr-debug-text');
+
+                if (debugDiv) debugDiv.classList.remove('d-none');
+
+                let debugInfo = '';
+                debugInfo += `jsQR متاح: ${typeof jsQR !== 'undefined' ? 'نعم ✅' : 'لا ❌'}<br>`;
+                debugInfo += `ZXing متاح: ${typeof ZXing !== 'undefined' ? 'نعم ✅' : 'لا ❌'}<br>`;
+                debugInfo += `getUserMedia متاح: ${navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'نعم ✅' : 'لا ❌'}<br>`;
+                debugInfo += `Canvas متاح: ${document.createElement('canvas').getContext ? 'نعم ✅' : 'لا ❌'}<br>`;
+                debugInfo += `المتصفح: ${navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'أخرى'}<br>`;
+
+                if (debugText) debugText.innerHTML = debugInfo;
+
+                // Test jsQR
+                if (typeof jsQR !== 'undefined') {
+                    console.log('jsQR library is available');
+                    debugInfo += `اختبار jsQR: نجح ✅<br>`;
+                } else {
+                    console.error('jsQR library is not available');
+                    debugInfo += `اختبار jsQR: فشل ❌<br>`;
+                }
+
+                // Test ZXing
+                if (typeof ZXing !== 'undefined') {
+                    try {
+                        const testReader = new ZXing.BrowserMultiFormatReader();
+                        console.log('ZXing barcode reader initialized successfully');
+                        debugInfo += `اختبار ZXing: نجح ✅<br>`;
+                        debugInfo += `أنواع Barcode المدعومة: Code128, Code39, EAN-13, EAN-8, UPC-A, UPC-E<br>`;
+                    } catch (error) {
+                        console.error('Error testing ZXing:', error);
+                        debugInfo += `اختبار ZXing: فشل ❌<br>`;
+                    }
+                } else {
+                    console.error('ZXing library is not available');
+                    debugInfo += `اختبار ZXing: غير متاح ❌<br>`;
+                }
+
+                if (debugText) debugText.innerHTML = debugInfo;
+            };
+
+            // Function to initialize QR camera
+            function initQRCamera() {
+                console.log('Initializing QR camera...');
+
+                const video = document.getElementById('qr-video');
+                const status = document.getElementById('qr-status');
+                const errorDiv = document.getElementById('qr-error');
+
+                if (!video) {
+                    console.error('Video element not found');
+                    return;
+                }
+
+                // Test jsQR availability first
+                if (typeof jsQR === 'undefined') {
+                    showQRError('مكتبة jsQR غير متاحة. يرجى إعادة تحميل الصفحة أو التحقق من الاتصال بالإنترنت.');
+                    return;
+                }
+
+                // Get available cameras
+                navigator.mediaDevices.enumerateDevices()
+                    .then(devices => {
+                        availableDevices = devices.filter(device => device.kind === 'videoinput');
+                        console.log('Available cameras:', availableDevices.length);
+
+                        if (availableDevices.length > 1) {
+                            const switchBtn = document.getElementById('switch-camera-btn');
+                            if (switchBtn) switchBtn.style.display = 'block';
+                        }
+
+                        return startCamera();
+                    })
+                    .catch(error => {
+                        console.error('Error enumerating devices:', error);
+                        showQRError('فشل في الوصول للكاميرا: ' + error.message);
+                    });
+            }
+
+            // Function to start camera
+            function startCamera() {
+                const video = document.getElementById('qr-video');
+                const status = document.getElementById('qr-status');
+
+                const constraints = {
+                    video: {
+                        facingMode: currentDeviceIndex === 0 ? 'environment' : 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                };
+
+                // If specific device is selected
+                if (availableDevices.length > 0 && availableDevices[currentDeviceIndex]) {
+                    constraints.video.deviceId = { exact: availableDevices[currentDeviceIndex].deviceId };
+                }
+
+                return navigator.mediaDevices.getUserMedia(constraints)
+                    .then(stream => {
+                        currentStream = stream;
+                        video.srcObject = stream;
+
+                        status.innerHTML = `
+                            <div class="text-success">
+                                <i class="fas fa-camera text-success fs-4"></i>
+                                <p class="mt-2 mb-0">الكاميرا جاهزة - وجه الكاميرا نحو الكود</p>
+                                <small class="text-muted">
+                                    حجم الفيديو: ${video.videoWidth}x${video.videoHeight}<br>
+                                    يدعم: QR Code, Code128, Code39, EAN-13, UPC-A
+                                </small>
+                            </div>
+                        `;
+
+                        // Show debug info
+                        const debugDiv = document.getElementById('qr-debug');
+                        const debugText = document.getElementById('qr-debug-text');
+                        if (debugDiv && debugText) {
+                            debugDiv.classList.remove('d-none');
+                            debugText.innerHTML = `
+                                الكاميرا: نشطة ✅<br>
+                                حجم الفيديو: ${video.videoWidth}x${video.videoHeight}<br>
+                                jsQR: ${typeof jsQR !== 'undefined' ? 'متاح ✅' : 'غير متاح ❌'}<br>
+                                ZXing: ${typeof ZXing !== 'undefined' ? 'متاح ✅' : 'غير متاح ❌'}<br>
+                                جاري البحث عن الرموز...<br>
+                                <small>نصيحة: اقترب من الكود (10-30 سم) وثبت الكاميرا</small>
+                            `;
+                        }
+
+                        // Start QR code detection
+                        startQRDetection();
+                    })
+                    .catch(error => {
+                        console.error('Error accessing camera:', error);
+                        let errorMessage = 'فشل في الوصول للكاميرا';
+
+                        if (error.name === 'NotAllowedError') {
+                            errorMessage = 'تم رفض الوصول للكاميرا. يرجى السماح بالوصول للكاميرا وإعادة المحاولة.';
+                        } else if (error.name === 'NotFoundError') {
+                            errorMessage = 'لم يتم العثور على كاميرا. تأكد من وجود كاميرا متصلة.';
+                        } else if (error.name === 'NotReadableError') {
+                            errorMessage = 'الكاميرا مستخدمة من تطبيق آخر. أغلق التطبيقات الأخرى وحاول مرة أخرى.';
+                        }
+
+                        showQRError(errorMessage);
+                    });
+            }
+
+            // Function to start QR and Barcode detection
+            function startQRDetection() {
+                const video = document.getElementById('qr-video');
+
+                if (!video) {
+                    console.error('Video element not found for QR detection');
+                    return;
+                }
+
+                console.log('Starting QR and Barcode detection...');
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                let scanCount = 0;
+                let lastScanTime = 0;
+
+                function scanFrame() {
+                    try {
+                        const now = Date.now();
+
+                        // Limit scanning to 10 FPS to improve performance
+                        if (now - lastScanTime < 100) {
+                            if (currentStream && currentStream.active) {
+                                requestAnimationFrame(scanFrame);
+                            }
+                            return;
+                        }
+                        lastScanTime = now;
+
+                        if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+
+                            // Draw the video frame to canvas
+                            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                            // Try QR Code detection first (most reliable)
+                            if (typeof jsQR !== 'undefined') {
+                                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+                                // Try multiple inversion attempts for better detection
+                                const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: "attemptBoth",
+                                });
+
+                                if (qrCode && qrCode.data) {
+                                    console.log('QR Code detected:', qrCode.data);
+                                    handleCodeResult(qrCode.data, 'QR Code');
+                                    return;
+                                }
+
+                                // If first attempt failed, try with different settings
+                                const qrCode2 = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: "onlyInvert",
+                                });
+
+                                if (qrCode2 && qrCode2.data) {
+                                    console.log('QR Code detected (inverted):', qrCode2.data);
+                                    handleCodeResult(qrCode2.data, 'QR Code');
+                                    return;
+                                }
+                            }
+
+                            // Try Barcode detection (every 3rd frame to reduce load)
+                            if (scanCount % 3 === 0 && typeof ZXing !== 'undefined') {
+                                try {
+                                    const codeReader = new ZXing.BrowserMultiFormatReader();
+                                    const result = codeReader.decodeFromCanvas(canvas);
+                                    if (result && result.text) {
+                                        console.log('Barcode detected:', result.text, 'Format:', result.format);
+                                        handleCodeResult(result.text, result.format || 'Barcode');
+                                        return;
+                                    }
+                                } catch (barcodeError) {
+                                    // Barcode not found, continue scanning
+                                    if (scanCount % 90 === 0) { // Log barcode errors less frequently
+                                        console.log('Barcode scan attempt failed (normal)');
+                                    }
+                                }
+                            }
+
+                            scanCount++;
+                            if (scanCount % 50 === 0) { // Log every 50 frames (5 seconds at 10 FPS)
+                                console.log('Scanning... Frame:', scanCount, 'Video size:', video.videoWidth, 'x', video.videoHeight);
+                                console.log('Libraries available:', {
+                                    jsQR: typeof jsQR !== 'undefined',
+                                    ZXing: typeof ZXing !== 'undefined'
+                                });
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error in code scanning:', error);
+                    }
+
+                    // Continue scanning
+                    if (currentStream && currentStream.active) {
+                        requestAnimationFrame(scanFrame);
+                    }
+                }
+
+                // Wait for video to be ready
+                if (video.readyState >= 2) {
+                    console.log('Video ready, starting scan immediately');
+                    scanFrame();
+                } else {
+                    video.addEventListener('loadeddata', () => {
+                        console.log('Video loaded, starting scan...');
+                        setTimeout(scanFrame, 500); // Small delay to ensure video is fully ready
+                    });
+                }
+            }
+
+            // Function to handle code result (QR Code or Barcode)
+            function handleCodeResult(codeData, codeType) {
+                console.log(`Processing ${codeType} data:`, codeData);
+
+                const receiptNumber = extractReceiptNumber(codeData);
+
+                if (receiptNumber) {
+                    console.log('Receipt number extracted:', receiptNumber, 'from', codeType);
+
+                    // Fill the receipt input
+                    const receiptInput = document.getElementById('receiptNumberInput');
+                    if (receiptInput) {
+                        receiptInput.value = receiptNumber;
+                    }
+
+                    // Stop camera and close scanner modal
+                    stopQRCamera();
+
+                    // Close scanner modal
+                    const scannerModal = document.getElementById('qrScannerModal');
+                    if (scannerModal) {
+                        const modalInstance = bootstrap.Modal.getInstance(scannerModal);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+
+                    // Show success message
+                    showSuccessNotification(`تم مسح ${codeType} بنجاح!`, `رقم الإيصال: ${receiptNumber}`);
+
+                    // Auto-confirm payment
+                    setTimeout(() => {
+                        handleConfirmPayment();
+                    }, 500);
+                } else {
+                    // Show more helpful error message
+                    const errorMessage = `
+                        لم يتم العثور على رقم إيصال في ${codeType}.
+                        <br><small>البيانات المقروءة: "${codeData}"</small>
+                        <br><small>تأكد من أن الكود يحتوي على رقم الإيصال أو أدخل الرقم يدوياً.</small>
+                    `;
+                    showQRError(errorMessage);
+
+                    // Auto-fill the code data in case user wants to edit it
+                    const receiptInput = document.getElementById('receiptNumberInput');
+                    if (receiptInput && codeData.trim()) {
+                        receiptInput.value = codeData.trim();
+                    }
+                }
+            }
+
+            // Backward compatibility - keep old function name
+            function handleQRResult(qrData) {
+                handleCodeResult(qrData, 'QR Code');
+            }
+
+            // Function to extract receipt number from code data
+            function extractReceiptNumber(codeData) {
+                console.log('Extracting receipt number from:', codeData);
+
+                // Clean the data
+                const cleanData = String(codeData).trim();
+
+                // If empty, return null
+                if (!cleanData) {
+                    console.log('Empty data provided');
+                    return null;
+                }
+
+                // If the entire string is just numbers, use it (most common case)
+                if (/^\d+$/.test(cleanData)) {
+                    console.log('Found direct number:', cleanData);
+                    return cleanData;
+                }
+
+                // Try to find the first sequence of digits (most flexible)
+                const numberMatch = cleanData.match(/\d+/);
+                if (numberMatch) {
+                    const number = numberMatch[0];
+                    console.log('Found first number in text:', number);
+                    return number;
+                }
+
+                console.log('No valid receipt number found in:', cleanData);
+                return null;
+            }
+
+            // Function to show QR error
+            function showQRError(message) {
+                const status = document.getElementById('qr-status');
+                const errorDiv = document.getElementById('qr-error');
+                const errorText = document.getElementById('qr-error-text');
+
+                if (status) status.style.display = 'none';
+                if (errorDiv) errorDiv.classList.remove('d-none');
+                if (errorText) errorText.innerHTML = message; // Use innerHTML to support HTML
+            }
+
+            // Function to retry QR camera
+            window.retryQRCamera = function() {
+                const status = document.getElementById('qr-status');
+                const errorDiv = document.getElementById('qr-error');
+
+                if (status) status.style.display = 'block';
+                if (errorDiv) errorDiv.classList.add('d-none');
+
+                stopQRCamera();
+                setTimeout(() => {
+                    initQRCamera();
+                }, 500);
+            };
+
+            // Function to switch camera
+            window.switchCamera = function() {
+                if (availableDevices.length > 1) {
+                    currentDeviceIndex = (currentDeviceIndex + 1) % availableDevices.length;
+                    console.log('Switching to camera:', currentDeviceIndex);
+
+                    stopQRCamera();
+                    setTimeout(() => {
+                        startCamera();
+                    }, 500);
+                }
+            };
+
+            // Function to switch to manual entry from QR scanner
+            window.manualEntryFromQR = function() {
+                console.log('Switching to manual entry from QR scanner');
+
+                // Stop camera
+                stopQRCamera();
+
+                // Close QR modal
+                const qrModal = document.getElementById('qrScannerModal');
+                if (qrModal) {
+                    const modalInstance = bootstrap.Modal.getInstance(qrModal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                }
+
+                // Focus on receipt input in main modal
+                setTimeout(() => {
+                    const receiptInput = document.getElementById('receiptNumberInput');
+                    if (receiptInput) {
+                        receiptInput.focus();
+                    }
+                }, 500);
+            };
+
+            // Function to open diagnostic page
+            window.openDiagnostic = function() {
+                console.log('Opening diagnostic page');
+                window.open('/simple-qr-test.html', '_blank');
+            };
+
+            // Function to stop QR camera
+            window.stopQRCamera = function() {
+                console.log('Stopping QR camera...');
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => {
+                        console.log('Stopping track:', track.kind);
+                        track.stop();
+                    });
+                    currentStream = null;
+                    console.log('Camera stopped successfully');
+                }
+            };
+
+            // Clean up camera when modal is closed
+            document.addEventListener('hidden.bs.modal', function(event) {
+                if (event.target.id === 'qrScannerModal') {
+                    console.log('QR Scanner modal closed, cleaning up...');
+                    stopQRCamera();
+
+                    // Remove modal from DOM
+                    setTimeout(() => {
+                        const qrModal = document.getElementById('qrScannerModal');
+                        if (qrModal) {
+                            qrModal.remove();
+                            console.log('QR Scanner modal removed from DOM');
+                        }
+                    }, 300);
+                } else if (event.target.id === 'receiptNumberModal') {
+                    console.log('Receipt modal closed, stopping any active camera...');
+                    stopQRCamera();
+
+                    // Clear global variables when receipt modal is closed
+                    currentEnrollmentId = null;
+                    currentPaymentStatus = null;
+                    currentPaymentButton = null;
+                }
+            });
+
+            // Also handle when user clicks the X button
+            document.addEventListener('click', function(event) {
+                if (event.target.classList.contains('btn-close') &&
+                    event.target.closest('#qrScannerModal')) {
+                    console.log('QR Scanner close button clicked');
+                    stopQRCamera();
+                }
+            });
+
             // Initial load
             loadDepartmentsIntoFilterSelect();
             loadGroupsIntoFilterSelect();
             setupFilterEvents();
             loadStudentsEnrollments();
+
+            // Setup receipt number modal event handlers after DOM is ready
+            setTimeout(() => {
+                setupReceiptNumberModal();
+            }, 100);
         });
     </script>
 </body>

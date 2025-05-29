@@ -168,6 +168,19 @@ function createTables() {
               }
             });
           }
+
+          // Check if price column exists, if not add it
+          const hasPriceColumn = rows.some(row => row.name === 'price');
+          if (!hasPriceColumn) {
+            // Add price column as INTEGER for whole numbers only
+            db.run("ALTER TABLE courses ADD COLUMN price INTEGER DEFAULT 0", (err) => {
+              if (err) {
+                console.error('Error adding price column to courses table:', err.message);
+              } else {
+                console.log('Added price column to courses table');
+              }
+            });
+          }
         }
       });
     }
@@ -273,6 +286,32 @@ function createTables() {
             console.error('Error adding payment_status column to enrollments table:', err.message);
           } else {
             console.log('Added payment_status column to enrollments table');
+          }
+        });
+      }
+
+      // Check if receipt_number column exists
+      const hasReceiptNumberColumn = rows.some(row => row.name === 'receipt_number');
+      if (!hasReceiptNumberColumn) {
+        // Add receipt_number column
+        db.run("ALTER TABLE enrollments ADD COLUMN receipt_number TEXT DEFAULT NULL", (err) => {
+          if (err) {
+            console.error('Error adding receipt_number column to enrollments table:', err.message);
+          } else {
+            console.log('Added receipt_number column to enrollments table');
+          }
+        });
+      }
+
+      // Check if payment_date column exists
+      const hasPaymentDateColumn = rows.some(row => row.name === 'payment_date');
+      if (!hasPaymentDateColumn) {
+        // Add payment_date column
+        db.run("ALTER TABLE enrollments ADD COLUMN payment_date TIMESTAMP DEFAULT NULL", (err) => {
+          if (err) {
+            console.error('Error adding payment_date column to enrollments table:', err.message);
+          } else {
+            console.log('Added payment_date column to enrollments table');
           }
         });
       }

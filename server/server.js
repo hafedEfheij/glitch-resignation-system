@@ -2,11 +2,7 @@ const express = require('express');
 const path = require('path');
 const bodyParser = require('body-parser');
 const session = require('express-session');
-
-// Use Vercel-compatible database if on Vercel, otherwise use regular database
-const db = process.env.VERCEL === '1'
-  ? require('./vercel-database')
-  : require('./database');
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -969,6 +965,8 @@ app.get('/api/admin/students/:id/courses', financialSupervisorMiddleware, (req, 
         SELECT
           e.id as enrollment_id,
           e.payment_status,
+          e.receipt_number,
+          e.payment_date,
           e.created_at,
           e.group_id,
           e.course_id,
@@ -1026,6 +1024,8 @@ app.get('/api/admin/students-enrollments', financialSupervisorMiddleware, (req, 
           SELECT
             e.id as enrollment_id,
             e.payment_status,
+            e.receipt_number,
+            e.payment_date,
             e.group_id,
             e.course_id,
             c.name as course_name,
@@ -1322,15 +1322,16 @@ app.get('/api/admin/courses/:id/prerequisites', adminMiddleware, (req, res) => {
 
 // Add course
 app.post('/api/admin/courses', adminMiddleware, (req, res) => {
-  const { course_code, name, department_id, semester } = req.body;
+  const { course_code, name, department_id, semester, price } = req.body;
   // الحد الأقصى للطلبة يتم حسابه تلقائيًا من مجموع المجموعات
   const max_students = 0;
+  const coursePrice = parseInt(price) || 0;
 
-  console.log('Received course data:', { course_code, name, department_id, semester, max_students: 'auto-calculated (0)' });
+  console.log('Received course data:', { course_code, name, department_id, semester, price: coursePrice, max_students: 'auto-calculated (0)' });
 
   // Validate input
-  if (!course_code || !name || !department_id) {
-    return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
+  if (!course_code || !name || !department_id || coursePrice < 0) {
+    return res.status(400).json({ error: 'جميع الحقول مطلوبة والسعر يجب أن يكون صحيحاً' });
   }
 
   // Check if department exists
@@ -1356,8 +1357,8 @@ app.post('/api/admin/courses', adminMiddleware, (req, res) => {
       }
 
       // Add course
-      db.run('INSERT INTO courses (course_code, name, department_id, max_students, semester) VALUES (?, ?, ?, ?, ?)',
-        [course_code, name, department_id, max_students, semester],
+      db.run('INSERT INTO courses (course_code, name, department_id, max_students, semester, price) VALUES (?, ?, ?, ?, ?, ?)',
+        [course_code, name, department_id, max_students, semester, coursePrice],
         function(err) {
           if (err) {
             console.error('Error creating course:', err.message);
@@ -1374,7 +1375,8 @@ app.post('/api/admin/courses', adminMiddleware, (req, res) => {
               name,
               department_id,
               max_students,
-              semester
+              semester,
+              price: coursePrice
             }
           });
         }
@@ -1386,15 +1388,16 @@ app.post('/api/admin/courses', adminMiddleware, (req, res) => {
 // Update course
 app.put('/api/admin/courses/:id', adminMiddleware, (req, res) => {
   const courseId = req.params.id;
-  const { course_code, name, department_id, semester } = req.body;
+  const { course_code, name, department_id, semester, price } = req.body;
   // الحد الأقصى للطلبة يتم حسابه تلقائيًا من مجموع المجموعات
   // نحتفظ بالقيمة الحالية ولا نقوم بتغييرها من خلال النموذج
+  const coursePrice = parseInt(price) || 0;
 
-  console.log('Updating course:', courseId, { course_code, name, department_id, semester });
+  console.log('Updating course:', courseId, { course_code, name, department_id, semester, price: coursePrice });
 
   // Validate input
-  if (!course_code || !name || !department_id) {
-    return res.status(400).json({ error: 'جميع الحقول مطلوبة' });
+  if (!course_code || !name || !department_id || coursePrice < 0) {
+    return res.status(400).json({ error: 'جميع الحقول مطلوبة والسعر يجب أن يكون صحيحاً' });
   }
 
   // Check if course exists
@@ -1440,8 +1443,8 @@ app.put('/api/admin/courses/:id', adminMiddleware, (req, res) => {
           const currentMaxStudents = currentCourse ? currentCourse.max_students : 0;
 
           // Update course
-          db.run('UPDATE courses SET course_code = ?, name = ?, department_id = ?, semester = ? WHERE id = ?',
-            [course_code, name, department_id, semester, courseId],
+          db.run('UPDATE courses SET course_code = ?, name = ?, department_id = ?, semester = ?, price = ? WHERE id = ?',
+            [course_code, name, department_id, semester, coursePrice, courseId],
             function(err) {
               if (err) {
                 console.error('Error updating course:', err.message);
@@ -1458,7 +1461,8 @@ app.put('/api/admin/courses/:id', adminMiddleware, (req, res) => {
                   name,
                   department_id,
                   max_students: currentMaxStudents,
-                  semester
+                  semester,
+                  price: coursePrice
                 }
               });
             }
@@ -1798,11 +1802,16 @@ app.delete('/api/admin/enrollments/:id', adminMiddleware, (req, res) => {
 // Update payment status for enrollment (admin and financial supervisor)
 app.put('/api/admin/enrollments/:id/payment-status', financialSupervisorMiddleware, (req, res) => {
   const enrollmentId = req.params.id;
-  const { payment_status } = req.body;
+  const { payment_status, receipt_number } = req.body;
 
   // Validate input
   if (!payment_status || (payment_status !== 'خالص' && payment_status !== 'غير خالص')) {
     return res.status(400).json({ error: 'حالة الدفع غير صالحة. يجب أن تكون "خالص" أو "غير خالص"' });
+  }
+
+  // If changing to paid status, receipt number is required
+  if (payment_status === 'خالص' && (!receipt_number || receipt_number.trim() === '')) {
+    return res.status(400).json({ error: 'رقم الإيصال مطلوب عند تغيير الحالة إلى "خالص"' });
   }
 
   // Check if enrollment exists
@@ -1815,105 +1824,37 @@ app.put('/api/admin/enrollments/:id/payment-status', financialSupervisorMiddlewa
       return res.status(404).json({ error: 'التسجيل غير موجود' });
     }
 
-    // Update payment status
-    db.run('UPDATE enrollments SET payment_status = ? WHERE id = ?',
-      [payment_status, enrollmentId],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: err.message });
-        }
+    // Prepare update query based on payment status
+    let updateQuery, updateParams;
 
-        res.json({
-          success: true,
-          message: `تم تحديث حالة الدفع إلى "${payment_status}" بنجاح`,
-          enrollment_id: enrollmentId,
-          payment_status: payment_status
-        });
-      }
-    );
-  });
-});
-
-// Get all students with their enrolled courses (admin and financial supervisor)
-app.get('/api/admin/students-enrollments', financialSupervisorMiddleware, (req, res) => {
-  // Get all students with their basic information
-  db.all(`
-    SELECT s.id, s.name, s.student_id, s.registration_number, s.department_id, s.semester, s.group_name, d.name as department_name
-    FROM students s
-    LEFT JOIN departments d ON s.department_id = d.id
-    ORDER BY s.name
-  `, (err, students) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+    if (payment_status === 'خالص') {
+      // When marking as paid, save receipt number and payment date
+      updateQuery = 'UPDATE enrollments SET payment_status = ?, receipt_number = ?, payment_date = CURRENT_TIMESTAMP WHERE id = ?';
+      updateParams = [payment_status, receipt_number.trim(), enrollmentId];
+    } else {
+      // When marking as unpaid, clear receipt number and payment date
+      updateQuery = 'UPDATE enrollments SET payment_status = ?, receipt_number = NULL, payment_date = NULL WHERE id = ?';
+      updateParams = [payment_status, enrollmentId];
     }
 
-    // Asegurarse de que todos los estudiantes tengan un valor de semestre y convertir department_id a string
-    students.forEach(student => {
-      if (!student.semester) {
-        student.semester = 'الأول';
-      }
-      // Convertir department_id a string para consistencia
-      if (student.department_id !== null && student.department_id !== undefined) {
-        student.department_id = String(student.department_id);
-      }
-    });
-
-    // Mostrar información de departamentos para depuración
-    db.all('SELECT * FROM departments', [], (err, departments) => {
+    // Update payment status
+    db.run(updateQuery, updateParams, function(err) {
       if (err) {
-        console.error('Error fetching departments:', err.message);
-      } else {
-        console.log('Fetching all departments');
-        console.log('Departments fetched:', departments.length);
-        console.log('Departments with string IDs:',
-          departments.map(d => ({ id: String(d.id), name: d.name, type: typeof String(d.id) }))
-        );
+        return res.status(500).json({ error: err.message });
       }
+
+      res.json({
+        success: true,
+        message: `تم تحديث حالة الدفع إلى "${payment_status}" بنجاح`,
+        enrollment_id: enrollmentId,
+        payment_status: payment_status,
+        receipt_number: payment_status === 'خالص' ? receipt_number.trim() : null
+      });
     });
-
-    // For each student, get their enrolled courses
-    const getStudentEnrollments = (student) => {
-      return new Promise((resolve, reject) => {
-        // Imprimir información del estudiante para depuración
-        console.log(`Obteniendo inscripciones para estudiante ID: ${student.id}, Nombre: ${student.name}`);
-
-        db.all(`
-          SELECT e.id as enrollment_id, e.payment_status, e.group_id,
-                 c.id as course_id, c.name as course_name, c.course_code, c.semester,
-                 g.group_name, g.id as group_id
-          FROM enrollments e
-          JOIN courses c ON e.course_id = c.id
-          LEFT JOIN course_groups g ON e.group_id = g.id
-          WHERE e.student_id = ?
-          ORDER BY c.name
-        `, [student.id], (err, enrollments) => {
-          // Imprimir información de las inscripciones para depuración
-          if (enrollments && enrollments.length > 0) {
-            console.log(`Estudiante ${student.id} tiene ${enrollments.length} inscripciones`);
-            console.log(`Primera inscripción: ${JSON.stringify(enrollments[0])}`);
-          } else {
-            console.log(`Estudiante ${student.id} no tiene inscripciones`);
-          }
-          if (err) {
-            reject(err);
-          } else {
-            student.enrollments = enrollments;
-            resolve(student);
-          }
-        });
-      });
-    };
-
-    // Process all students
-    Promise.all(students.map(getStudentEnrollments))
-      .then(studentsWithEnrollments => {
-        res.json({ students: studentsWithEnrollments });
-      })
-      .catch(err => {
-        res.status(500).json({ error: err.message });
-      });
   });
 });
+
+
 
 // Student routes
 

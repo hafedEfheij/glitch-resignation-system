@@ -138,6 +138,14 @@
                                             <option value="الثامن">الثامن</option>
                                         </select>
                                     </div>
+                                    <div class="mb-3">
+                                        <label for="course-price" class="form-label">سعر المادة</label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="course-price"
+                                                   min="0" step="1" placeholder="0" required>
+                                            <span class="input-group-text">دينار</span>
+                                        </div>
+                                    </div>
                                     <div class="d-grid gap-2">
                                         <button type="submit" class="btn btn-info">إضافة</button>
                                     </div>
@@ -242,6 +250,7 @@
                                                 <th>اسم المادة</th>
                                                 <th>التخصص</th>
                                                 <th>الفصل الدراسي</th>
+                                                <th>السعر</th>
                                                 <th>الحد الأقصى للطلبة</th>
                                                 <th class="text-center">المجموعات</th>
                                                 <th class="text-center">الإجراءات</th>
@@ -310,6 +319,14 @@
                                 <option value="السابع">السابع</option>
                                 <option value="الثامن">الثامن</option>
                             </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="edit-course-price" class="form-label">سعر المادة</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="edit-course-price"
+                                       min="0" step="1" placeholder="0" required>
+                                <span class="input-group-text">دينار</span>
+                            </div>
                         </div>
                     </form>
                 </div>
