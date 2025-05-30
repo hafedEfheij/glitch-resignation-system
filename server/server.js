@@ -1913,6 +1913,100 @@ app.get('/api/student/completed-courses', authMiddleware, (req, res) => {
   });
 });
 
+// Get student courses with receipt numbers (for student reports)
+app.get('/api/student/courses', authMiddleware, (req, res) => {
+  console.log(`API /api/student/courses called by user: ${req.session.user.username} (ID: ${req.session.user.id}) with role: ${req.session.user.role}`);
+
+  if (req.session.user.role !== 'student') {
+    console.log(`Access denied: User role is ${req.session.user.role}, expected 'student'`);
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  // Get student ID from user session
+  db.get('SELECT id FROM students WHERE user_id = ?', [req.session.user.id], (err, student) => {
+    if (err) {
+      console.error('Error fetching student:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const studentId = student.id;
+    console.log('Getting courses for student ID:', studentId);
+
+    // Get student info
+    db.get(`
+      SELECT s.*, d.name as department_name
+      FROM students s
+      LEFT JOIN departments d ON s.department_id = d.id
+      WHERE s.id = ?
+    `, [studentId], (err, studentInfo) => {
+      if (err) {
+        console.error('Error fetching student info:', err.message);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!studentInfo) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      // Get completed courses
+      db.all(`
+        SELECT cc.*, c.course_code, c.name, c.semester, COALESCE(c.price, 0) as price, d.name as department_name
+        FROM completed_courses cc
+        JOIN courses c ON cc.course_id = c.id
+        LEFT JOIN departments d ON c.department_id = d.id
+        WHERE cc.student_id = ?
+      `, [studentId], (err, completedCourses) => {
+        if (err) {
+          console.error('Error fetching completed courses:', err.message);
+          return res.status(500).json({ error: err.message });
+        }
+
+        console.log('Found completed courses:', completedCourses.length);
+
+        // Get enrolled courses with receipt numbers
+        db.all(`
+          SELECT
+            e.id as enrollment_id,
+            e.payment_status,
+            e.receipt_number,
+            e.payment_date,
+            e.created_at,
+            e.group_id,
+            e.course_id,
+            c.course_code,
+            c.name as course_name,
+            c.semester,
+            COALESCE(c.price, 0) as price,
+            d.name as department_name,
+            g.group_name
+          FROM enrollments e
+          JOIN courses c ON e.course_id = c.id
+          LEFT JOIN departments d ON c.department_id = d.id
+          LEFT JOIN course_groups g ON e.group_id = g.id
+          WHERE e.student_id = ?
+        `, [studentId], (err, enrolledCourses) => {
+          if (err) {
+            console.error('Error fetching enrolled courses:', err.message);
+            return res.status(500).json({ error: err.message });
+          }
+
+          console.log('Found enrolled courses:', enrolledCourses.length);
+
+          res.json({
+            student: studentInfo,
+            completedCourses,
+            enrolledCourses
+          });
+        });
+      });
+    });
+  });
+});
+
 // Get available courses for student
 app.get('/api/student/available-courses', authMiddleware, (req, res) => {
   if (req.session.user.role !== 'student') {
