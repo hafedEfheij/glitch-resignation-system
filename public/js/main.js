@@ -4744,11 +4744,11 @@ function loadStudentReport() {
             </div>
         `;
 
-        // First, get student info
-        fetch('/api/student/info')
+        // Get student courses with receipt numbers
+        fetch('/api/student/courses')
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('فشل في الحصول على معلومات الطالب');
+                    throw new Error('فشل في الحصول على بيانات الطالب');
                 }
                 return response.json();
             })
@@ -4758,33 +4758,10 @@ function loadStudentReport() {
                 }
 
                 const student = studentData.student;
+                const enrolledCourses = studentData.enrolledCourses || [];
+                const completedCourses = studentData.completedCourses || [];
 
-                // Then, get available courses (which includes enrolled courses)
-                return fetch('/api/student/available-courses')
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('فشل في الحصول على المواد المسجل بها');
-                        }
-                        return response.json();
-                    })
-                    .then(coursesData => {
-                        if (!coursesData || !Array.isArray(coursesData.courses)) {
-                            throw new Error('بيانات المواد غير متوفرة');
-                        }
-
-                        try {
-                            // Filter enrolled courses and ensure enrollment_percentage is calculated correctly
-                            const enrolledCourses = coursesData.courses.filter(course => course.is_enrolled).map(course => {
-                                // Calculate enrollment percentage if it's not already calculated or is NaN
-                                if (!course.enrollment_percentage || isNaN(course.enrollment_percentage)) {
-                                    if (course.max_students > 0) {
-                                        course.enrollment_percentage = (course.enrolled_students / course.max_students) * 100;
-                                    } else {
-                                        course.enrollment_percentage = 0;
-                                    }
-                                }
-                                return course;
-                            });
+                try {
 
                             // Generate report HTML
                             let reportHtml = `
@@ -4834,9 +4811,11 @@ function loadStudentReport() {
                                                     <th>رمز المادة</th>
                                                     <th>اسم المادة</th>
                                                     <th>الفصل الدراسي</th>
+                                                    <th>الرسوم</th>
                                                     <th>المجموعة</th>
                                                     <th>التوقيت</th>
                                                     <th>حالة الدفع</th>
+                                                    <th>رقم الإيصال</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -4846,9 +4825,13 @@ function loadStudentReport() {
                                     // Get course semester (if available)
                                     const courseSemester = course.semester || 'غير محدد';
 
+                                    // Get course price
+                                    const coursePrice = parseFloat(course.price) || 0;
+                                    const formattedPrice = coursePrice.toLocaleString('ar-LY');
+
                                     // Get group info if available
-                                    const groupName = course.group_info ? course.group_info.group_name : 'غير محدد';
-                                    const timeSlot = course.group_info ? (course.group_info.time_slot || 'غير محدد') : 'غير محدد';
+                                    const groupName = course.group_name || 'غير محدد';
+                                    const timeSlot = 'غير محدد'; // Time slot not available in new API
 
                                     // Get payment status if available
                                     let paymentStatus = course.payment_status || 'غير خالص';
@@ -4857,15 +4840,32 @@ function loadStudentReport() {
                                         ${paymentStatus}
                                     </span>`;
 
+                                    // Get receipt number if available
+                                    let receiptNumber = course.receipt_number || '';
+                                    let receiptDisplay = '';
+                                    if (paymentStatus === 'خالص' && receiptNumber && receiptNumber.trim() !== '') {
+                                        receiptDisplay = `<span class="badge bg-info">
+                                            <i class="fas fa-receipt me-1"></i>
+                                            ${receiptNumber}
+                                        </span>`;
+                                    } else {
+                                        receiptDisplay = `<span class="text-muted">
+                                            <i class="fas fa-minus me-1"></i>
+                                            غير متوفر
+                                        </span>`;
+                                    }
+
                                     reportHtml += `
                                         <tr>
                                             <td>${index + 1}</td>
                                             <td>${course.course_code}</td>
-                                            <td>${course.name}</td>
+                                            <td>${course.course_name}</td>
                                             <td>${courseSemester}</td>
+                                            <td><span class="badge ${paymentStatus === 'خالص' ? 'bg-success' : 'bg-danger'}">${formattedPrice} دينار</span></td>
                                             <td>${groupName}</td>
                                             <td>${timeSlot}</td>
                                             <td>${paymentStatusBadge}</td>
+                                            <td>${receiptDisplay}</td>
                                         </tr>
                                     `;
                                 });
@@ -5047,8 +5047,10 @@ function openStudentReportModal(studentId) {
                                             <th>رمز المادة</th>
                                             <th>اسم المادة</th>
                                             <th>الفصل الدراسي</th>
+                                            <th>الرسوم</th>
                                             <th>تاريخ التسجيل</th>
                                             <th>حالة الدفع</th>
+                                            <th>رقم الإيصال</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -5062,6 +5064,10 @@ function openStudentReportModal(studentId) {
                             // Get course semester (if available)
                             const courseSemester = course.semester || 'غير محدد';
 
+                            // Get course price
+                            const coursePrice = parseFloat(course.price) || 0;
+                            const formattedPrice = coursePrice.toLocaleString('ar-LY');
+
                             // Get payment status if available
                             let paymentStatus = course.payment_status || 'غير خالص';
                             let paymentStatusBadge = `<span class="badge ${paymentStatus === 'خالص' ? 'bg-success' : 'bg-danger'}">
@@ -5069,14 +5075,31 @@ function openStudentReportModal(studentId) {
                                 ${paymentStatus}
                             </span>`;
 
+                            // Get receipt number if available
+                            let receiptNumber = course.receipt_number || '';
+                            let receiptDisplay = '';
+                            if (paymentStatus === 'خالص' && receiptNumber && receiptNumber.trim() !== '') {
+                                receiptDisplay = `<span class="badge bg-info">
+                                    <i class="fas fa-receipt me-1"></i>
+                                    ${receiptNumber}
+                                </span>`;
+                            } else {
+                                receiptDisplay = `<span class="text-muted">
+                                    <i class="fas fa-minus me-1"></i>
+                                    غير متوفر
+                                </span>`;
+                            }
+
                             reportHtml += `
                                 <tr>
                                     <td>${index + 1}</td>
                                     <td>${course.course_code}</td>
-                                    <td>${course.name}</td>
+                                    <td>${course.course_name}</td>
                                     <td>${courseSemester}</td>
+                                    <td><span class="badge ${paymentStatus === 'خالص' ? 'bg-success' : 'bg-danger'}">${formattedPrice} دينار</span></td>
                                     <td>${formattedDate}</td>
                                     <td>${paymentStatusBadge}</td>
+                                    <td>${receiptDisplay}</td>
                                 </tr>
                             `;
                         });
