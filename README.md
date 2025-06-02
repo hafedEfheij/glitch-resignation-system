@@ -12,7 +12,7 @@ This is a university course registration system built with Node.js, Express, and
 - Course completion tracking
 
 #### Admin
-- Username: admin
+- Username: ****
 - Password: admin123
 
 ## Getting Started
