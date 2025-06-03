@@ -16,13 +16,7 @@ This is a university course registration system built with Node.js, Express, and
 - Username: ****
 - Password: ******
 
-## Getting Started
 
-### Login Credentials
-
-### Database
-
-The SQLite database is stored in the `.data` directory for persistence on Glitch.
 
 ### API Endpoints
 
