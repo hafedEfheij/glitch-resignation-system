@@ -3,13 +3,7 @@
 This is a university course registration system built with Node.js, Express, and SQLite.
 
 
-## Features
 
-- Student course registration
-- Admin management of courses, students, and departments
-- Prerequisites management
-- Enrollment tracking
-- Course completion tracking
 
 #### Admin
 - Username: ****
