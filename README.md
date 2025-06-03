@@ -38,7 +38,10 @@ The SQLite database is stored in the `.data` directory for persistence on Glitch
 - POST `/api/admin/departments` - Add a new department
 - GET `/api/admin/course/:id` - Get course details
 - GET `/api/admin/course/:id/students` - Get students enrolled in a course
-
+```bash
+npm install
+npm start
+```
 #### Student Routes
 - GET `/api/student/courses` - Get available courses for a student
 - POST `/api/student/enroll` - Enroll in a course
