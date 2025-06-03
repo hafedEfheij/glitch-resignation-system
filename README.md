@@ -47,10 +47,7 @@ The SQLite database is stored in the `.data` directory for persistence on Glitch
 
 
 
-```bash
-npm install
-npm start
-```
+
 
 The server will start on port 3000 by default, or the port specified in the `PORT` environment variable.
 ## Development
