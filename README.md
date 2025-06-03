@@ -45,9 +45,7 @@ The SQLite database is stored in the `.data` directory for persistence on Glitch
 - GET `/api/student/enrollments` - Get student's enrollments
 - GET `/api/student/enrollment-count` - Get student's enrollment count
 
-## Development
 
-To run the project locally:
 
 ```bash
 npm install
