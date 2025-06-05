@@ -9,9 +9,7 @@ This is a university course registration system built with Node.js, Express, and
 - Enrollment tracking
 - Course completion tracking
   
-#### Admin
-- Username: ****
-- Password: ******
+
 
 ## Getting Started
 
