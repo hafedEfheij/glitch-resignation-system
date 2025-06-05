@@ -8,7 +8,10 @@ This is a university course registration system built with Node.js, Express, and
 - Prerequisites management
 - Enrollment tracking
 - Course completion tracking
-  
+
+  #### Admin
+- Username: ****
+- Password: ******
 
 
 ## Getting Started
